@@ -1,5 +1,8 @@
 import xml.etree.ElementTree as ET
 
+
+
+
 def parse_xml(xml_text, source_date, all_matches):
     try:
         root = ET.fromstring(xml_text)

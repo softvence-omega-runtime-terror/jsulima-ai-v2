@@ -22,3 +22,6 @@ logger.info("Application has started successfully.")
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to My FastAPI Application!"}
+
+from app.routes.v1.UFC.schedule import router as schedule_router
+app.include_router(schedule_router)
