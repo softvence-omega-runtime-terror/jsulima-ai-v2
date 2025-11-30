@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    goalserve_api_key: str
+    GOALSERVE_API_KEY: str
 
     log_level: str = "INFO"
     log_directory: str = "logs"

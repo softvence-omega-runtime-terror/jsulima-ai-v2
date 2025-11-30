@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 import requests
 from datetime import datetime
-from app.core.config import SCHEDULE_URL
+from app.services.UFC.schedule_pars import SCHEDULE_URL
 from app.services.UFC.schedule_pars import parse_schedule_xml
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
