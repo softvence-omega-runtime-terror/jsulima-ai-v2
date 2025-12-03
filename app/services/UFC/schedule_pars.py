@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 from app.core.config import settings
-SCHEDULE_URL = f"https://www.goalserve.com/getfeed/{settings.GOALSERVE_API_KEY}/mma/schedule"
+SCHEDULE_URL = f"https://www.goalserve.com/getfeed/{settings.goalserve_api_key}/mma/schedule"
 
 def parse_schedule_xml(xml_text):
     """Parse GoalServe UFC schedule XML into structured JSON."""

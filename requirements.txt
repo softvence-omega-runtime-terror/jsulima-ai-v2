@@ -1,4 +1,5 @@
 fastapi[standard]
 pydantic-settings
-requests
 pandas
+scikit-learn
+requests

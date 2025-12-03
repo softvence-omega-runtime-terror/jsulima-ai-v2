@@ -2,7 +2,7 @@ import requests
 from app.services.UFC.parser import parse_xml
 from app.core.config import settings
 
-BASE_URL = f"https://www.goalserve.com/getfeed/{settings.GOALSERVE_API_KEY}/mma/live?date="
+BASE_URL = f"https://www.goalserve.com/getfeed/{settings.goalserve_api_key}/mma/live?date="
 START_YEAR = 2010
 END_YEAR = 2025
 
