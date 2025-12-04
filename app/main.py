@@ -1,5 +1,6 @@
 import logging
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 
 from app.core.logger import setup_logging
 from app.routes import prediction
@@ -30,3 +31,7 @@ async def read_root():
 
 from app.routes.v1.UFC.schedule import router as schedule_router
 app.include_router(schedule_router)
+
+from app.routes.v1.UFC.ufc_predict import router as ufc_router
+app.include_router(ufc_router, prefix="/api/v1/ufc", tags=["UFC"])
+
