@@ -4,11 +4,11 @@ from datetime import datetime
 from app.services.UFC.schedule_pars import SCHEDULE_URL
 from app.services.UFC.schedule_pars import parse_schedule_xml
 
-router = APIRouter(prefix="/schedule", tags=["Schedule"])
+router = APIRouter()
 
 
 @router.get("/")
-def get_upcoming_schedule(limit: int| None = Query(default=None, description="Number of matches to return")):
+def get_upcoming_schedule(limit: int| None = Query(default=20, description="Number of matches to return")):
     """
     Fetch only UPCOMING UFC matches from GoalServe.
     Limit results using: /schedule?limit=10

@@ -131,12 +131,13 @@ class ErrorResponse(BaseModel):
 class PlayerPredictionRequest(BaseModel):
     """Request model for player ID-based prediction."""
     
-    localteam: int = Field(..., description="Local team/player ID")
-    awayteam: int = Field(..., description="Away team/player ID")
+    localteam: int = Field(default=88040, description="Local team/player ID", )
+    awayteam: int = Field(default=97830, description="Away team/player ID")
     date: Optional[str] = Field(
-        None,
-        description="Date to filter historical data (DD-MM-YYYY format). If not provided, uses all historical data"
+        "14.12.2025",
+        description="Date to filter historical data (DD-MM-YYYY format). If not provided, uses all historical data",
     )
+
 
 
 class TeamInfo(BaseModel):
