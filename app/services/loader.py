@@ -104,3 +104,15 @@ def get_data_info(df: pd.DataFrame) -> dict:
         'missing_values': df.isnull().sum().sum(),
         'shape': df.shape
     }
+
+import pandas as pd
+from .UFC.player_service import PlayerService
+
+class DataLoader:
+
+    def __init__(self):
+        self.df = pd.read_csv("app/data/ufc_2018_2024.csv")
+        self.player_service = PlayerService(self.df)
+
+    def get_player_service(self):
+        return self.player_service

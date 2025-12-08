@@ -7,8 +7,8 @@ This module handles fetching player statistics and information from historical U
 import pandas as pd
 from typing import Dict, Optional, Tuple
 from datetime import datetime
-from app.services.loader import load_ufc_data
 from app.core.logger import get_logger
+from .loader import load_ufc_data
 
 logger = get_logger(__name__)
 
@@ -239,4 +239,3 @@ def get_fighter_stats_for_prediction(
     }
     
     return fighter_stats
-
