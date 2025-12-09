@@ -1,5 +1,13 @@
 fastapi[standard]
+uvicorn
+pydantic
 pydantic-settings
 pandas
 scikit-learn
 requests
+numpy
+xgboost
+lightgbm
+joblib
+pytest
+python-dotenv

@@ -1,5 +1,6 @@
 import logging
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import PlainTextResponse
 
 from app.core.logger import setup_logging
@@ -19,6 +20,8 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+app.mount("/static", StaticFiles(directory="app/data/ufc"), name="static")
+
 logger.info("Application has started successfully.")
 
 @app.get("/")
@@ -32,4 +35,4 @@ from app.routes.v1.UFC.ufc_predict import router as ufc_router
 
 app.include_router(schedule_router, prefix="/api/v1/ufc/schedule", tags=["UFC"])
 app.include_router(ufc_router, prefix="/api/v1/ufc/stats", tags=["UFC"])
-app.include_router(prediction_router, prefix="/api/v1/ufc/prediction", tags=["UFC"])
+app.include_router(prediction_router, prefix="/api/v1/ufc/predict", tags=["UFC"])
