@@ -31,8 +31,10 @@ async def read_root():
 from app.routes.v1.UFC.prediction import router as prediction_router
 from app.routes.v1.UFC.schedule import router as schedule_router
 from app.routes.v1.UFC.ufc_predict import router as ufc_router
+from app.routes.v1.UFC.head_to_head import router as h2h_router
 
 
 app.include_router(schedule_router, prefix="/api/v1/ufc/schedule", tags=["UFC"])
 app.include_router(ufc_router, prefix="/api/v1/ufc/stats", tags=["UFC"])
 app.include_router(prediction_router, prefix="/api/v1/ufc/predict", tags=["UFC"])
+app.include_router(h2h_router, prefix="/api/v1/ufc/head_to_head", tags=["UFC"])

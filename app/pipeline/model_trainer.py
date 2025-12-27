@@ -18,12 +18,15 @@ import joblib
 import json
 from datetime import datetime
 
-from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.model_selection import cross_val_score, StratifiedKFold, RandomizedSearchCV
 from sklearn.ensemble import (
     RandomForestClassifier, GradientBoostingClassifier, 
     VotingClassifier, StackingClassifier, RandomForestRegressor
 )
 from sklearn.linear_model import LogisticRegression
+
+from app.pipeline.custom_models import ManualVotingClassifier
+
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import (
     accuracy_score, f1_score, roc_auc_score, balanced_accuracy_score,
@@ -133,7 +136,7 @@ def feature_selection(X_train, y_train, feature_cols: List[str], n_features: int
 
 
 def train_advanced_models(X_train, y_train, X_val, y_val, sample_weights=None):
-    """Train multiple advanced models and select the best"""
+    """Train ensemble of advanced models with fixed hyperparameters"""
     models = {}
     results = {}
     
@@ -141,20 +144,20 @@ def train_advanced_models(X_train, y_train, X_val, y_val, sample_weights=None):
     class_ratio = sum(y_train == 0) / sum(y_train == 1)
     print(f"  Class Ratio (0/1): {class_ratio:.2f}")
 
-    # 1. XGBoost (Tuned)
+    # 1. XGBoost (Tuned Fixed Parameters)
     if HAS_XGB:
         print("\n  Training XGBoost...")
         xgb_model = xgb.XGBClassifier(
-            n_estimators=300,
-            max_depth=4,
+            n_estimators=200,
+            max_depth=3,
             learning_rate=0.03,
-            subsample=0.8,
+            subsample=0.7,
             colsample_bytree=0.8,
             min_child_weight=3,
             gamma=0.2,
-            reg_alpha=0.5,
-            reg_lambda=1.0,
-            scale_pos_weight=class_ratio,  # Handle imbalance
+            reg_alpha=1.0,
+            reg_lambda=2.0,
+            scale_pos_weight=class_ratio,
             random_state=42,
             use_label_encoder=False,
             eval_metric='logloss',
@@ -164,31 +167,19 @@ def train_advanced_models(X_train, y_train, X_val, y_val, sample_weights=None):
             xgb_model.fit(X_train, y_train, sample_weight=sample_weights)
         else:
             xgb_model.fit(X_train, y_train)
-            
-        # Evaluation (No calibration to avoid errors)
-        val_pred = xgb_model.predict(X_val)
-        val_prob = xgb_model.predict_proba(X_val)[:, 1]
-        
-        acc = accuracy_score(y_val, val_pred)
-        f1 = f1_score(y_val, val_pred)
-        roc = roc_auc_score(y_val, val_prob)
-        brier = brier_score_loss(y_val, val_prob)
-        
         models['XGBoost'] = xgb_model
-        results['XGBoost'] = {'accuracy': acc, 'f1': f1, 'roc_auc': roc, 'brier': brier}
-        print(f"    XGBoost: Acc={acc:.4f}, ROC={roc:.4f}, Brier={brier:.4f}")
 
-    # 2. LightGBM (Tuned)
+    # 2. LightGBM (Tuned Fixed Parameters)
     if HAS_LGB:
         print("  Training LightGBM...")
         lgb_model = lgb.LGBMClassifier(
             n_estimators=300,
-            max_depth=5,
-            learning_rate=0.03,
-            num_leaves=20,
-            subsample=0.8,
+            max_depth=4,
+            learning_rate=0.05,
+            num_leaves=40,
+            min_child_samples=50,
+            subsample=0.7,
             colsample_bytree=0.8,
-            min_child_samples=30,
             reg_alpha=0.5,
             reg_lambda=1.0,
             scale_pos_weight=class_ratio,
@@ -200,24 +191,52 @@ def train_advanced_models(X_train, y_train, X_val, y_val, sample_weights=None):
             lgb_model.fit(X_train, y_train, sample_weight=sample_weights)
         else:
             lgb_model.fit(X_train, y_train)
-            
-        val_pred = lgb_model.predict(X_val)
-        val_prob = lgb_model.predict_proba(X_val)[:, 1]
-        
-        acc = accuracy_score(y_val, val_pred)
-        f1 = f1_score(y_val, val_pred)
-        roc = roc_auc_score(y_val, val_prob)
-        brier = brier_score_loss(y_val, val_prob)
-        
         models['LightGBM'] = lgb_model
-        results['LightGBM'] = {'accuracy': acc, 'f1': f1, 'roc_auc': roc, 'brier': brier}
-        print(f"    LightGBM: Acc={acc:.4f}, ROC={roc:.4f}, Brier={brier:.4f}")
 
-    # Select best model by ROC-AUC
-    best_name = max(results, key=lambda x: results[x]['roc_auc'])
-    print(f"\n  Best Model: {best_name} (ROC-AUC: {results[best_name]['roc_auc']:.4f})")
+    # 3. Random Forest (Fixed parameters)
+    print("  Training Random Forest...")
+    rf_model = RandomForestClassifier(
+        n_estimators=300,
+        max_depth=12,
+        min_samples_split=5,
+        max_features='sqrt',
+        class_weight='balanced',
+        random_state=42,
+        n_jobs=-1
+    )
+    if sample_weights is not None:
+        rf_model.fit(X_train, y_train, sample_weight=sample_weights)
+    else:
+        rf_model.fit(X_train, y_train)
+    models['RandomForest'] = rf_model
+
+    # 4. Manual Voting Ensemble
+    print("\n  Training Voting Ensemble...")
+    fitted_estimators = []
+    if HAS_XGB: fitted_estimators.append(('xgb', models['XGBoost']))
+    if HAS_LGB: fitted_estimators.append(('lgb', models['LightGBM']))
+    fitted_estimators.append(('rf', models['RandomForest']))
     
-    return models[best_name], best_name, models, results
+    voting_clf = ManualVotingClassifier(fitted_estimators)
+
+    val_prob = voting_clf.predict_proba(X_val)[:, 1]
+    val_pred = (val_prob >= 0.5).astype(int)
+    
+    acc = accuracy_score(y_val, val_pred)
+    f1 = f1_score(y_val, val_pred)
+    roc = roc_auc_score(y_val, val_prob)
+    brier = brier_score_loss(y_val, val_prob)
+    
+    print(f"    Ensemble: Acc={acc:.4f}, ROC={roc:.4f}, Brier={brier:.4f}")
+    
+    results['VotingEnsemble'] = {'accuracy': acc, 'f1': f1, 'roc_auc': roc, 'brier': brier}
+
+    best_name = 'VotingEnsemble'
+    best_model = voting_clf
+    
+    return best_model, best_name, models, results
+
+
 
 
 def calculate_recency_weights(dates: pd.Series, decay_rate: float = 0.15) -> np.ndarray:
@@ -331,20 +350,21 @@ def main():
             
     valid_features = [f for f in extended_features if f in train.columns]
     
-    X_train = train[valid_features].values
+    X_train = train[valid_features]
     y_train = train['winner'].values.astype(int)
-    X_val = val[valid_features].values
+    X_val = val[valid_features]
     y_val = val['winner'].values.astype(int)
-    X_test = test[valid_features].values
+    X_test = test[valid_features]
     y_test = test['winner'].values.astype(int)
     
     # 4. Feature Selection
     print("\n[3/6] Selecting features...")
-    selected_features = feature_selection(X_train, y_train, valid_features, n_features=50)
+    # Restore feature count to 75 (Optimal for ensemble)
+    selected_features = feature_selection(X_train, y_train, valid_features, n_features=75)
     
-    X_train_sel = train[selected_features].values
-    X_val_sel = val[selected_features].values
-    X_test_sel = test[selected_features].values
+    X_train_sel = train[selected_features]
+    X_val_sel = val[selected_features]
+    X_test_sel = test[selected_features]
     
     # Recency weights
     weights = calculate_recency_weights(train['fight_date'])
@@ -355,9 +375,11 @@ def main():
         X_train_sel, y_train, X_val_sel, y_val, sample_weights=weights
     )
     
-    # Optimize threshold
-    best_threshold = optimize_threshold(best_model, X_val_sel, y_val)
-    print(f"  Optimal Threshold: {best_threshold:.2f}")
+    # Optimize threshold (Constrained to prevent overfitting)
+    # Ensembles are usually well-calibrated, so we stick closer to 0.5
+    raw_threshold = optimize_threshold(best_model, X_val_sel, y_val)
+    best_threshold = np.clip(raw_threshold, 0.45, 0.55)
+    print(f"  Optimal Threshold (Constrained): {best_threshold:.2f} (Raw: {raw_threshold:.2f})")
     
     # Auxiliary models (train on all features for simplicity, or selected)
     # Using selected features is safer for consistency
@@ -397,6 +419,13 @@ def main():
     print(f"  Balanced Acc:  {balanced:.4f}")
     print(f"  ROC-AUC:       {roc:.4f}")
     print(f"  Confusion Matrix:\n{cm}")
+
+    # Write report to file
+    with open("accuracy_report.txt", "w") as f:
+        f.write(f"Test Accuracy: {acc:.4f} ({acc*100:.2f}%)\n")
+        f.write(f"Balanced Acc:  {balanced:.4f}\n")
+        f.write(f"ROC-AUC:       {roc:.4f}\n")
+
     
     # 7. Save
     print("\n[6/6] Saving resources...")

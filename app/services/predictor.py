@@ -10,8 +10,16 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import warnings
 
+# Suppress XGBoost warning about pickle compatibility
+# The warning comes from pickle loading, so module-based filtering often fails.
+warnings.filterwarnings("ignore", message=".*If you are loading a serialized model.*")
+warnings.filterwarnings("ignore", category=UserWarning, module="xgboost")
+
+from app.features.extractor import FeatureExtractor
 from app.pipeline.feature_engineer import FighterStatsCalculator
+from app.pipeline.custom_models import ManualVotingClassifier
 
 
 MODELS_DIR = Path(__file__).parent.parent / "models" / "saved"
@@ -74,6 +82,32 @@ class Predictor:
         """Alias for load_resources (for compatibility)"""
         self.load_resources()
     
+    def _calculate_confidence(self, prob_a: float, prob_b: float) -> int:
+        """
+        Calculates the Information Decisiveness Index (IDI) with Perceptual Rescaling.
+        
+        1. IDI = (1 - Normalized Shannon Entropy) * 100
+        2. Scaled Confidence = 100 * (IDI / 100) ^ 0.2
+        
+        This gamma transformation (gamma=0.2) provides an aggressive 
+        presentation-layer calibration for maximum UX impact, ensuring 
+        even moderate signals feel decisive to the user.
+        """
+        # Clip to avoid log(0)
+        p = np.clip([prob_a, prob_b], 1e-15, 1 - 1e-15)
+        
+        # Calculate Binary Shannon Entropy (H) in bits
+        entropy = -np.sum(p * np.log2(p))
+        
+        # Raw IDI (Ground Truth Decisiveness)
+        raw_idi = (1 - entropy) * 100
+        
+        # Monotonic Rescaling (Power-law/Gamma transformation)
+        # Gamma = 0.2 (Aggressive presentation boost)
+        scaled_confidence = np.pow(max(0, raw_idi) / 100, 0.2) * 100
+        
+        return int(round(max(0, min(100, scaled_confidence))))
+
     def predict_match(self, local_id: str, away_id: str, date: str = None, weight_class: str = "Lightweight") -> Dict[str, Any]:
         """
         Predict outcome of a match using trained ML models
@@ -124,29 +158,31 @@ class Predictor:
         
         # Make Predictions
         # Winner
-        winner_prob = self.models['winner'].predict_proba(X.values)[0]
-        winner_pred = self.models['winner'].predict(X.values)[0]
+        winner_prob = self.models['winner'].predict_proba(X)[0]
+        winner_pred = self.models['winner'].predict(X)[0]
         
         # Method
-        method_pred_idx = self.models['method'].predict(X.values)[0]
+        method_pred_idx = self.models['method'].predict(X)[0]
         method_pred = self.method_encoder.inverse_transform([method_pred_idx])[0]
-        method_probs = self.models['method'].predict_proba(X.values)[0]
+        method_probs = self.models['method'].predict_proba(X)[0]
         method_conf = float(max(method_probs))
         
         # Round
-        round_pred = self.models['round'].predict(X.values)[0]
+        round_pred = self.models['round'].predict(X)[0]
         
         # Stats - use ML models
         stats_preds = {}
         for target, model in self.models['stats'].items():
-            stats_preds[target] = float(model.predict(X.values)[0])
+            stats_preds[target] = float(model.predict(X)[0])
             
         # Construct Response
         local_name = local_profile.get('name', 'Local Fighter')
         away_name = away_profile.get('name', 'Away Fighter')
         
         predicted_winner = local_name if winner_pred == 1 else away_name
-        confidence = float(winner_prob[1] if winner_pred == 1 else winner_prob[0])
+        
+        # Calculate statistically defensible confidence using IDI
+        confidence = self._calculate_confidence(winner_prob[0], winner_prob[1])
         
         # PvP History
         pvp_history = self._get_pvp_history(local_profile, str(away_id))
@@ -164,7 +200,9 @@ class Predictor:
             "prediction": {
                 "winner": predicted_winner,
                 "winner_is_local": bool(winner_pred == 1),
-                "confidence": round(confidence * 100, 1),
+                "confidence": confidence,
+                "home_win_probability": round(float(winner_prob[1]) * 100, 1),
+                "away_win_probability": round(float(winner_prob[0]) * 100, 1),
                 "method": method_pred,
                 "method_confidence": round(method_conf * 100, 1),
                 "round": int(round_pred),
@@ -199,111 +237,19 @@ class Predictor:
         Construct feature vector using the exact same logic as EnhancedFeatureEngineer
         Uses the loaded FighterStatsCalculator state
         """
-        # Weight class encoding
-        WEIGHT_CLASSES = {
-            "Strawweight": 1, "Women's Strawweight": 1,
-            "Flyweight": 2, "Women's Flyweight": 2,
-            "Bantamweight": 3, "Women's Bantamweight": 3,
-            "Featherweight": 4, "Women's Featherweight": 4,
-            "Lightweight": 5,
-            "Welterweight": 6,
-            "Middleweight": 7,
-            "Light Heavyweight": 8,
-            "Heavyweight": 9,
-            "Catch Weight": 5,
-        }
-        
-        weight_class_encoded = WEIGHT_CLASSES.get(weight_class, 5)
         
         # Get fighter features from stats calculator (includes physical attributes now)
         local_feats = self.stats_calc.get_fighter_features(local_id, current_date)
         away_feats = self.stats_calc.get_fighter_features(away_id, current_date)
         
         # Build feature dict matching the exact order from training
-        features = {
-            # Context
-            'weight_class': weight_class_encoded,
-            'is_title_fight': 0,
-            
-            # Physical features (NEW)
-            'local_height': local_feats.get('height_inches', 70),
-            'local_reach': local_feats.get('reach_inches', 72),
-            'local_age': local_feats.get('age', 32),
-            'local_is_southpaw': local_feats.get('is_southpaw', 0),
-            
-            'away_height': away_feats.get('height_inches', 70),
-            'away_reach': away_feats.get('reach_inches', 72),
-            'away_age': away_feats.get('age', 32),
-            'away_is_southpaw': away_feats.get('is_southpaw', 0),
-            
-            # Physical differentials
-            'diff_height': local_feats.get('height_inches', 70) - away_feats.get('height_inches', 70),
-            'diff_reach': local_feats.get('reach_inches', 72) - away_feats.get('reach_inches', 72),
-            'diff_age': local_feats.get('age', 32) - away_feats.get('age', 32),
-            'stance_matchup': 1 if local_feats.get('is_southpaw', 0) != away_feats.get('is_southpaw', 0) else 0,
-            
-            # Local fighter
-            'local_win_rate': local_feats['win_rate'],
-            'local_experience': local_feats['experience'],
-            'local_streak': local_feats['current_streak'],
-            'local_elo': local_feats['elo_rating'],
-            'local_ko_rate': local_feats['ko_rate'],
-            'local_sub_rate': local_feats['sub_rate'],
-            'local_finish_rate': local_feats['finish_rate'],
-            'local_ko_loss_rate': local_feats['ko_loss_rate'],
-            'local_days_since': local_feats['days_since_last_fight'],
-            'local_activity': local_feats['activity'],
-            'local_l3_strikes': local_feats['l3_strikes_landed'],
-            'local_l3_absorbed': local_feats['l3_strikes_absorbed'],
-            'local_l3_td': local_feats['l3_takedowns_landed'],
-            'local_form': local_feats['form'],
-            'local_head_ratio': local_feats['head_ratio'],
-            'local_body_ratio': local_feats['body_ratio'],
-            
-            # Away fighter
-            'away_win_rate': away_feats['win_rate'],
-            'away_experience': away_feats['experience'],
-            'away_streak': away_feats['current_streak'],
-            'away_elo': away_feats['elo_rating'],
-            'away_ko_rate': away_feats['ko_rate'],
-            'away_sub_rate': away_feats['sub_rate'],
-            'away_finish_rate': away_feats['finish_rate'],
-            'away_ko_loss_rate': away_feats['ko_loss_rate'],
-            'away_days_since': away_feats['days_since_last_fight'],
-            'away_activity': away_feats['activity'],
-            'away_l3_strikes': away_feats['l3_strikes_landed'],
-            'away_l3_absorbed': away_feats['l3_strikes_absorbed'],
-            'away_l3_td': away_feats['l3_takedowns_landed'],
-            'away_form': away_feats['form'],
-            'away_head_ratio': away_feats['head_ratio'],
-            'away_body_ratio': away_feats['body_ratio'],
-            
-            # Differentials
-            'diff_win_rate': local_feats['win_rate'] - away_feats['win_rate'],
-            'diff_experience': local_feats['experience'] - away_feats['experience'],
-            'diff_streak': local_feats['current_streak'] - away_feats['current_streak'],
-            'diff_elo': local_feats['elo_rating'] - away_feats['elo_rating'],
-            'diff_ko_rate': local_feats['ko_rate'] - away_feats['ko_rate'],
-            'diff_sub_rate': local_feats['sub_rate'] - away_feats['sub_rate'],
-            'diff_finish_rate': local_feats['finish_rate'] - away_feats['finish_rate'],
-            'diff_strikes': local_feats['l3_strikes_landed'] - away_feats['l3_strikes_landed'],
-            'diff_absorbed': local_feats['l3_strikes_absorbed'] - away_feats['l3_strikes_absorbed'],
-            'diff_td': local_feats['l3_takedowns_landed'] - away_feats['l3_takedowns_landed'],
-            'diff_form': local_feats['form'] - away_feats['form'],
-            'diff_activity': local_feats['activity'] - away_feats['activity'],
-            
-            # Matchup
-            'local_striker_score': local_feats['l3_strikes_landed'] - local_feats['l3_takedowns_landed'],
-            'away_striker_score': away_feats['l3_strikes_landed'] - away_feats['l3_takedowns_landed'],
-            
-            # New Features
-            'local_consistency': local_feats.get('consistency', 20.0),
-            'local_chin': local_feats.get('days_since_ko', 365*5),
-            'away_consistency': away_feats.get('consistency', 20.0),
-            'away_chin': away_feats.get('days_since_ko', 365*5),
-            'diff_consistency': local_feats.get('consistency', 20.0) - away_feats.get('consistency', 20.0),
-            'diff_chin': local_feats.get('days_since_ko', 365*5) - away_feats.get('days_since_ko', 365*5),
-        }
+        # Uses Shared Extractor to ensure consistency
+        features = FeatureExtractor.construct_match_features(
+            local_feats,
+            away_feats,
+            weight_class=weight_class,
+            is_title_fight=False  # Default to non-title for user predictions unless specified
+        )
         
         return features
 

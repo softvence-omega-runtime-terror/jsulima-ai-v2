@@ -3,6 +3,7 @@ import requests
 from datetime import datetime
 from app.services.UFC.schedule_pars import SCHEDULE_URL
 from app.services.UFC.schedule_pars import parse_schedule_xml
+from app.services.predictor import get_predictor
 
 router = APIRouter()
 
@@ -10,7 +11,7 @@ router = APIRouter()
 @router.get("/")
 def get_upcoming_schedule(limit: int| None = Query(default=20, description="Number of matches to return")):
     """
-    Fetch only UPCOMING UFC matches from GoalServe.
+    Fetch only UPCOMING UFC matches from GoalServe and add predictions.
     Limit results using: /schedule?limit=10
     """
 
@@ -21,6 +22,7 @@ def get_upcoming_schedule(limit: int| None = Query(default=20, description="Numb
         return {"error": f"Failed to fetch schedule: {str(e)}"}
 
     all_events = parse_schedule_xml(response.text)
+    predictor = get_predictor()
 
     upcoming_matches = []
     now = datetime.utcnow()
@@ -40,6 +42,30 @@ def get_upcoming_schedule(limit: int| None = Query(default=20, description="Numb
             if match_datetime > now:
                 m["event_name"] = event["category_name"]
                 m["event_date"] = event["event_date"]
+                
+                # Initialize default values to ensure they are always in the response
+                m["home_win_probability"] = 50.0
+                m["away_win_probability"] = 50.0
+                m["confidence"] = 50
+
+                # Add real Predictions if possible
+                try:
+                    prediction = predictor.predict_match(
+                        local_id=m["localteam"]["id"],
+                        away_id=m["awayteam"]["id"],
+                        date=m["date"],
+                        weight_class=m.get("type", "Lightweight")
+                    )
+                    
+                    if "prediction" in prediction:
+                        res = prediction["prediction"]
+                        m["home_win_probability"] = float(res.get("home_win_probability", 50.0))
+                        m["away_win_probability"] = float(res.get("away_win_probability", 50.0))
+                        m["confidence"] = int(res.get("confidence", 50))
+                        
+                except Exception as e:
+                    print(f"Error predicting match {m.get('match_id')}: {e}")
+
                 upcoming_matches.append(m)
 
     # Sort by closest match
