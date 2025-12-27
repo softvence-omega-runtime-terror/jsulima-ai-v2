@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 from collections import defaultdict
 import json
+from app.features.extractor import FeatureExtractor
 
 
 PROCESSED_DIR = Path(__file__).parent.parent / "data" / "processed"
@@ -169,6 +170,8 @@ class FighterStatsCalculator:
             "history": [],
             "strikes_history": [],  # For consistency
             "last_ko_loss_date": None,
+            "elo_history": [],        # History of opponent ELOs
+            "opp_record_history": [], # History of opponent win rates
         })
         self.elo_system = ELORatingSystem()
         self.profile_loader = EnhancedProfileLoader()
@@ -262,6 +265,16 @@ class FighterStatsCalculator:
                 self.elo_system.update_ratings(opp_id, fighter_id)
         else:
             self.elo_system.update_ratings(fighter_id, opp_id, is_draw=True)
+
+        # Track Opponent Quality (using PRE-FIGHT ratings)
+        opp_rating = self.elo_system.get_rating(opp_id)
+        stats['elo_history'].append(opp_rating)
+
+        # Track Opponent Record Quality
+        opp_stats = self.fighter_stats.get(opp_id, {})
+        opp_wins = opp_stats.get('wins', 0)
+        opp_fights = max(opp_stats.get('fights', 0), 1)
+        stats['opp_record_history'].append(opp_wins / opp_fights)
     
     def get_fighter_features(self, fighter_id: str, current_date: pd.Timestamp) -> Dict[str, float]:
         """Get comprehensive features for a fighter at a specific date"""
@@ -269,9 +282,12 @@ class FighterStatsCalculator:
         
         # Get physical features from enhanced profiles
         physical = self.profile_loader.get_physical_features(fighter_id)
+        strikes = self.profile_loader.get_strike_averages(fighter_id)
+        grappling = self.profile_loader.get_grappling_averages(fighter_id)
+        knockdowns = self.profile_loader.get_knockdown_averages(fighter_id)
         
         if not stats:
-            return self._get_empty_features(physical)
+            return self._get_empty_features(physical, strikes, grappling, knockdowns)
         
         # Basic stats
         fights = max(stats.get('fights', 0), 1)
@@ -285,10 +301,20 @@ class FighterStatsCalculator:
             'stance': physical['stance'],
             'is_southpaw': physical['is_southpaw'],
             
+            # Enhanced Profile Stats (New)
+            'slpm': strikes['slpm'],
+            'sapm': strikes['sapm'],
+            'avg_sub_att': grappling['avg_submissions'],
+            'td_acc': grappling['td_acc'],
+            'td_def': grappling['td_def'],
+            'avg_td': grappling['avg_td_landed'],
+            'avg_ctrl_time': grappling['avg_ctrl_time'],
+            'avg_kd_landed': knockdowns['avg_kd_landed'],
+            'avg_kd_absorbed': knockdowns['avg_kd_absorbed'],
+            
             # Performance stats
             'win_rate': wins / fights,
             'experience': fights,
-            'current_streak': stats.get('current_streak', 0),
             'current_streak': stats.get('current_streak', 0),
             'elo_rating': self.elo_system.get_rating(str(fighter_id)),
         }
@@ -351,6 +377,8 @@ class FighterStatsCalculator:
             features['l3_strikes_absorbed'] = sum(x['strikes_absorbed'] for x in last_3) / n
             features['l3_takedowns_landed'] = sum(x['takedowns_landed'] for x in last_3) / n
             features['l3_takedowns_absorbed'] = sum(x['takedowns_absorbed'] for x in last_3) / n
+            features['l3_knockdowns'] = sum(x['knockdowns'] for x in last_3) / n
+            features['l3_ctrl_time'] = sum(x['control_time'] for x in last_3) / n
             
             # Strike distribution
             total_head = sum(x.get('strikes_head', 0) for x in last_3)
@@ -371,6 +399,20 @@ class FighterStatsCalculator:
             weights = [0.5, 0.3, 0.2][:n]
             weights = [w / sum(weights) for w in weights]
             features['form'] = sum(last_3[-(i+1)]['won'] * weights[i] for i in range(n))
+            
+            # Opponent Quality (Last 3)
+            elo_hist = stats.get('elo_history', [])[-3:]
+            rec_hist = stats.get('opp_record_history', [])[-3:]
+            
+            if elo_hist:
+                features['avg_opp_elo'] = sum(elo_hist) / len(elo_hist)
+            else:
+                features['avg_opp_elo'] = 1500.0
+                
+            if rec_hist:
+                features['avg_opp_win_rate'] = sum(rec_hist) / len(rec_hist)
+            else:
+                features['avg_opp_win_rate'] = 0.5
         else:
             features['l3_win_rate'] = 0.0
             features['l3_finish_rate'] = 0.0
@@ -382,11 +424,13 @@ class FighterStatsCalculator:
             features['body_ratio'] = 0.25
             features['legs_ratio'] = 0.25
             features['form'] = 0.0
+            features['avg_opp_elo'] = 1500.0
+            features['avg_opp_win_rate'] = 0.5
         
         return features
 
     
-    def _get_empty_features(self, physical: Dict) -> Dict[str, float]:
+    def _get_empty_features(self, physical: Dict, strikes: Dict, grappling: Dict, knockdowns: Dict) -> Dict[str, float]:
         """Return zeroed features for unknown fighters with physical data"""
         return {
             'height_inches': physical['height_inches'],
@@ -394,6 +438,15 @@ class FighterStatsCalculator:
             'age': physical['age'],
             'stance': physical['stance'],
             'is_southpaw': physical['is_southpaw'],
+            
+            # Enhanced Stats
+            'slpm': strikes['slpm'],
+            'sapm': strikes['sapm'],
+            'avg_sub_att': grappling['avg_submissions'],
+            'td_acc': grappling['td_acc'],
+            'td_def': grappling['td_def'],
+            'avg_td': grappling['avg_td_landed'],
+
             'win_rate': 0.0,
             'experience': 0,
             'current_streak': 0,
@@ -413,10 +466,14 @@ class FighterStatsCalculator:
             'l3_strikes_absorbed': 0.0,
             'l3_takedowns_landed': 0.0,
             'l3_takedowns_absorbed': 0.0,
+            'l3_knockdowns': 0.0,
+            'l3_ctrl_time': 0.0,
             'head_ratio': 0.5,
             'body_ratio': 0.25,
             'legs_ratio': 0.25,
             'form': 0.0,
+            'avg_opp_elo': 1500.0,
+            'avg_opp_win_rate': 0.5,
         }
     
     def save_state(self, filepath: Path = None):
@@ -493,92 +550,18 @@ class EnhancedFeatureEngineer:
             local_feats = self.stats_calc.get_fighter_features(row['localteam_id'], current_date)
             away_feats = self.stats_calc.get_fighter_features(row['awayteam_id'], current_date)
             
-            # Create feature row
-            features = {
+            # Create feature row using Shared Extractor
+            features = FeatureExtractor.construct_match_features(
+                local_feats, 
+                away_feats, 
+                weight_class=row.get('weight_class', 'Lightweight'),
+                is_title_fight=(row.get('fight_round') == 5)
+            )
+            
+            # Add metadata and targets
+            features.update({
                 'match_id': row['match_id'],
                 'fight_date': row['fight_date'],
-                'weight_class': row.get('weight_class_encoded', 5),
-                'is_title_fight': 1 if row.get('fight_round') == 5 else 0,
-                
-                # ===== PHYSICAL FEATURES (NEW) =====
-                'local_height': local_feats['height_inches'],
-                'local_reach': local_feats['reach_inches'],
-                'local_age': local_feats['age'],
-                'local_is_southpaw': local_feats['is_southpaw'],
-                
-                'away_height': away_feats['height_inches'],
-                'away_reach': away_feats['reach_inches'],
-                'away_age': away_feats['age'],
-                'away_is_southpaw': away_feats['is_southpaw'],
-                
-                # Physical differentials
-                'diff_height': local_feats['height_inches'] - away_feats['height_inches'],
-                'diff_reach': local_feats['reach_inches'] - away_feats['reach_inches'],
-                'diff_age': local_feats['age'] - away_feats['age'],
-                'stance_matchup': 1 if local_feats['is_southpaw'] != away_feats['is_southpaw'] else 0,
-                
-                # ===== LOCAL FIGHTER FEATURES =====
-                'local_win_rate': local_feats['win_rate'],
-                'local_experience': local_feats['experience'],
-                'local_streak': local_feats['current_streak'],
-                'local_elo': local_feats['elo_rating'],
-                'local_ko_rate': local_feats['ko_rate'],
-                'local_sub_rate': local_feats['sub_rate'],
-                'local_finish_rate': local_feats['finish_rate'],
-                'local_ko_loss_rate': local_feats['ko_loss_rate'],
-                'local_days_since': local_feats['days_since_last_fight'],
-                'local_activity': local_feats['activity'],
-                'local_l3_strikes': local_feats['l3_strikes_landed'],
-                'local_l3_absorbed': local_feats['l3_strikes_absorbed'],
-                'local_l3_td': local_feats['l3_takedowns_landed'],
-                'local_form': local_feats['form'],
-                'local_form': local_feats['form'],
-                'local_head_ratio': local_feats['head_ratio'],
-                'local_body_ratio': local_feats['body_ratio'],
-                'local_consistency': local_feats['consistency'],
-                'local_chin': local_feats['days_since_ko'],
-                
-                # ===== AWAY FIGHTER FEATURES =====
-                'away_win_rate': away_feats['win_rate'],
-                'away_experience': away_feats['experience'],
-                'away_streak': away_feats['current_streak'],
-                'away_elo': away_feats['elo_rating'],
-                'away_ko_rate': away_feats['ko_rate'],
-                'away_sub_rate': away_feats['sub_rate'],
-                'away_finish_rate': away_feats['finish_rate'],
-                'away_ko_loss_rate': away_feats['ko_loss_rate'],
-                'away_days_since': away_feats['days_since_last_fight'],
-                'away_activity': away_feats['activity'],
-                'away_l3_strikes': away_feats['l3_strikes_landed'],
-                'away_l3_absorbed': away_feats['l3_strikes_absorbed'],
-                'away_l3_td': away_feats['l3_takedowns_landed'],
-                'away_form': away_feats['form'],
-                'away_head_ratio': away_feats['head_ratio'],
-                'away_body_ratio': away_feats['body_ratio'],
-                'away_consistency': away_feats['consistency'],
-                'away_chin': away_feats['days_since_ko'],
-                
-                # ===== DIFFERENTIALS (Local - Away) =====
-                'diff_win_rate': local_feats['win_rate'] - away_feats['win_rate'],
-                'diff_experience': local_feats['experience'] - away_feats['experience'],
-                'diff_streak': local_feats['current_streak'] - away_feats['current_streak'],
-                'diff_elo': local_feats['elo_rating'] - away_feats['elo_rating'],
-                'diff_ko_rate': local_feats['ko_rate'] - away_feats['ko_rate'],
-                'diff_sub_rate': local_feats['sub_rate'] - away_feats['sub_rate'],
-                'diff_finish_rate': local_feats['finish_rate'] - away_feats['finish_rate'],
-                'diff_strikes': local_feats['l3_strikes_landed'] - away_feats['l3_strikes_landed'],
-                'diff_absorbed': local_feats['l3_strikes_absorbed'] - away_feats['l3_strikes_absorbed'],
-                'diff_td': local_feats['l3_takedowns_landed'] - away_feats['l3_takedowns_landed'],
-                'diff_form': local_feats['form'] - away_feats['form'],
-                'diff_activity': local_feats['activity'] - away_feats['activity'],
-                'diff_consistency': local_feats['consistency'] - away_feats['consistency'],
-                'diff_chin': local_feats['days_since_ko'] - away_feats['days_since_ko'],
-                
-                # ===== MATCHUP FEATURES =====
-                'local_striker_score': local_feats['l3_strikes_landed'] - local_feats['l3_takedowns_landed'],
-                'away_striker_score': away_feats['l3_strikes_landed'] - away_feats['l3_takedowns_landed'],
-                
-                # ===== TARGETS =====
                 'winner': row['winner'],
                 'win_method': row['win_method'],
                 'fight_round': row['fight_round'],
@@ -594,7 +577,8 @@ class EnhancedFeatureEngineer:
                 'away_strikes_legs': row.get('away_strikes_legs', 0),
                 'local_takedowns_landed': row.get('local_takedowns_landed', 0),
                 'away_takedowns_landed': row.get('away_takedowns_landed', 0),
-            }
+            })
+
             
             features_list.append(features)
             
@@ -613,12 +597,17 @@ class EnhancedFeatureEngineer:
             'local_height', 'local_reach', 'local_age', 'local_is_southpaw',
             'away_height', 'away_reach', 'away_age', 'away_is_southpaw',
             'diff_height', 'diff_reach', 'diff_age', 'stance_matchup',
+
+            # Enhanced Stats (NEW)
+            'local_slpm', 'local_sapm', 'local_td_acc', 'local_td_def', 'local_avg_td', 'local_sub_att', 'local_avg_kd', 'local_avg_ctrl',
+            'away_slpm', 'away_sapm', 'away_td_acc', 'away_td_def', 'away_avg_td', 'away_sub_att', 'away_avg_kd', 'away_avg_ctrl',
+            'diff_slpm', 'diff_sapm', 'diff_td_acc', 'diff_td_def', 'diff_avg_td', 'diff_sub_att', 'diff_avg_kd', 'diff_avg_ctrl',
             
             # Local fighter
             'local_win_rate', 'local_experience', 'local_streak', 'local_elo',
             'local_ko_rate', 'local_sub_rate', 'local_finish_rate', 'local_ko_loss_rate',
             'local_days_since', 'local_activity',
-            'local_l3_strikes', 'local_l3_absorbed', 'local_l3_td',
+            'local_l3_strikes', 'local_l3_absorbed', 'local_l3_td', 'local_l3_kd', 'local_l3_ctrl',
             'local_form', 'local_head_ratio', 'local_body_ratio',
             'local_consistency', 'local_chin',
             
@@ -626,14 +615,14 @@ class EnhancedFeatureEngineer:
             'away_win_rate', 'away_experience', 'away_streak', 'away_elo',
             'away_ko_rate', 'away_sub_rate', 'away_finish_rate', 'away_ko_loss_rate',
             'away_days_since', 'away_activity',
-            'away_l3_strikes', 'away_l3_absorbed', 'away_l3_td',
+            'away_l3_strikes', 'away_l3_absorbed', 'away_l3_td', 'away_l3_kd', 'away_l3_ctrl',
             'away_form', 'away_head_ratio', 'away_body_ratio',
             'away_consistency', 'away_chin',
             
             # Differentials
             'diff_win_rate', 'diff_experience', 'diff_streak', 'diff_elo',
             'diff_ko_rate', 'diff_sub_rate', 'diff_finish_rate',
-            'diff_strikes', 'diff_absorbed', 'diff_td', 'diff_form', 'diff_activity',
+            'diff_strikes', 'diff_absorbed', 'diff_td', 'diff_kd', 'diff_ctrl', 'diff_form', 'diff_activity',
             'diff_consistency', 'diff_chin',
             
             # Matchup
