@@ -38,7 +38,8 @@ from app.routes.v1.UFC.ufc_predict import router as ufc_router
 from app.routes.Basketball.basketball_schedule import router as basketball_schedule_router
 from app.routes.Basketball.basketball_prediction import router as basketball_prediction_router
 from app.routes.v1.UFC.head_to_head import router as h2h_router
-from app.routes.v1.UFC.basketball_schedule import router as basketball_router
+from app.routes.Basketball.basketball_schedule import router as basketball_router
+from app.routes.NBA.head_to_head_route import router as nba_h2h_router
 
 
 app.include_router(schedule_router, prefix="/api/v1/ufc/schedule", tags=["UFC"])
@@ -48,3 +49,4 @@ app.include_router(basketball_schedule_router, prefix="/api/v1/basketball/schedu
 app.include_router(basketball_prediction_router, prefix="/api/v1/basketball", tags=["Basketball"])
 app.include_router(h2h_router, prefix="/api/v1/ufc/head_to_head", tags=["UFC"])
 app.include_router(basketball_router, prefix="/api/v1/basketball/schedule", tags=["Basketball"])
+app.include_router(nba_h2h_router, prefix="/api/v1/nba/head-to-head", tags=["NBA"])
