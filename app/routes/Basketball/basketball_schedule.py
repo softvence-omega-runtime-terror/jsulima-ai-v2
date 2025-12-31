@@ -141,36 +141,3 @@ def get_upcoming_schedule(
     }
 
 
-@router.get("/all")
-def get_all_matches():
-    """
-    Fetch ALL matches (including past and upcoming) from GoalServe.
-    
-    Returns:
-    - status: success/error
-    - total_matches: Total number of matches
-    - matches: List of all match details
-    """
-    
-    try:
-        response = requests.get(SCHEDULE_URL, timeout=30)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Failed to fetch schedule: {str(e)}"
-        )
-    
-    try:
-        all_matches = parse_schedule_xml(response.text)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to parse schedule: {str(e)}"
-        )
-    
-    return {
-        "status": "success",
-        "total_matches": len(all_matches),
-        "matches": all_matches
-    }
