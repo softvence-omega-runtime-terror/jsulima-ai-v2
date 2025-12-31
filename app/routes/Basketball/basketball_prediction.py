@@ -98,18 +98,20 @@ async def predict_basketball_game(
                 "match_id": request.match_id,
                 "awayteam": {
                     "awayteam_id": request.awayteam_id,
-                    "awayteam_name": away_name,
-                    "win_probability": away_prob,
+                    "awayteam_name": result['away'],
+                    "win_probability": result['away_win_probability'],
                     "is_winner": not is_home_winner
                 },
                 "hometeam": {
                     "hometeam_id": request.hometeam_id,
-                    "hometeam_name": home_name,
-                    "win_probability": home_prob,
+                    "hometeam_name": result['home'],
+                    "win_probability": result['home_win_probability'],
                     "is_winner": is_home_winner
                 }
             }
         }
+
+
         
         return response
             

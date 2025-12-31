@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import List, Dict, Any
 import xml.etree.ElementTree as ET
 
+from app.services.Basketball.basketball_predictor import get_basketball_predictor
+
 router = APIRouter()
 
 # GoalServe API URL
@@ -133,6 +135,52 @@ def get_upcoming_schedule(
     # Apply limit
     if limit is not None and limit > 0:
         upcoming_matches = upcoming_matches[:limit]
+    
+    # Add win probabilities for each match
+    predictor = get_basketball_predictor()
+    for match in upcoming_matches:
+        try:
+            hometeam_id = match.get("hometeam", {}).get("hometeam_id", "")
+            awayteam_id = match.get("awayteam", {}).get("awayteam_id", "")
+            match_date = match.get("date", "")
+            
+            # Convert date from DD.MM.YYYY to YYYY-MM-DD for predictor
+            if match_date:
+                try:
+                    date_obj = datetime.strptime(match_date, "%d.%m.%Y")
+                    internal_date = date_obj.strftime("%Y-%m-%d")
+                except:
+                    internal_date = datetime.now().strftime("%Y-%m-%d")
+            else:
+                internal_date = datetime.now().strftime("%Y-%m-%d")
+            
+            if hometeam_id and awayteam_id:
+                result = predictor.predict_game(
+                    hometeam_id=hometeam_id,
+                    awayteam_id=awayteam_id,
+                    date=internal_date
+                )
+                
+                if "error" not in result:
+                    match["home_win_probability"] = result.get('home_win_probability', 0)
+                    match["away_win_probability"] = result.get('away_win_probability', 0)
+                    # Calculate confidence as the higher probability value
+                    home_prob = result.get('home_win_probability', 50)
+                    away_prob = result.get('away_win_probability', 50)
+                    match["confidence"] = max(home_prob, away_prob)
+                else:
+                    match["home_win_probability"] = ""
+                    match["away_win_probability"] = ""
+                    match["confidence"] = ""
+            else:
+                match["home_win_probability"] = ""
+                match["away_win_probability"] = ""
+                match["confidence"] = ""
+        except Exception as e:
+            # If prediction fails, set empty probabilities
+            match["home_win_probability"] = ""
+            match["away_win_probability"] = ""
+            match["confidence"] = ""
     
     return {
         "status": "success",

@@ -38,7 +38,7 @@ from app.routes.v1.UFC.ufc_predict import router as ufc_router
 from app.routes.Basketball.basketball_schedule import router as basketball_schedule_router
 from app.routes.Basketball.basketball_prediction import router as basketball_prediction_router
 from app.routes.v1.UFC.head_to_head import router as h2h_router
-from app.routes.v1.UFC.basketball_schedule import router as basketball_router
+from app.routes.Basketball.basketball_schedule import router as basketball_router
 
 
 app.include_router(schedule_router, prefix="/api/v1/ufc/schedule", tags=["UFC"])
