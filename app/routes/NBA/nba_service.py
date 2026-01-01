@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import pickle
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -484,8 +485,14 @@ def parse_goalserve_matches(raw: Dict) -> List[Dict]:
         for m in match_entries:
             if not isinstance(m, dict):
                 continue
+            raw_match_id = m.get("id")
+            try:
+                match_id = str(int(raw_match_id)) if raw_match_id is not None else None
+            except (TypeError, ValueError):
+                match_id = str(raw_match_id) if raw_match_id is not None else None
             rows.append(
                 {
+                    "match_id": match_id,
                     "date": m.get("formatted_date") or day_date,
                     "status": m.get("status", ""),
                     "venue_name": m.get("venue_name", ""),
@@ -496,6 +503,39 @@ def parse_goalserve_matches(raw: Dict) -> List[Dict]:
                 }
             )
     return rows
+
+
+def parse_match_date(date_str: Optional[str]):
+    """Attempt to parse a date string into a date object."""
+    if not date_str:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except (TypeError, ValueError):
+            continue
+    parsed = pd.to_datetime(date_str, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
+def find_match_details(match_date: Optional[str], home_team_id: int, away_team_id: int) -> Dict:
+    """Locate a specific match in the Goalserve schedule using date + team IDs."""
+    sched_raw = fetch_goalserve_schedule()
+    rows = parse_goalserve_matches(sched_raw)
+    target_date = parse_match_date(match_date)
+
+    for r in rows:
+        r_date = parse_match_date(r.get("date"))
+        if target_date and r_date and r_date != target_date:
+            continue
+        if r.get("home_id") and int(r["home_id"]) != int(home_team_id):
+            continue
+        if r.get("away_id") and int(r["away_id"]) != int(away_team_id):
+            continue
+        return r
+    return {}
 
 
 def latest_team_rows(tg_ready: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float]]:
@@ -572,3 +612,36 @@ def predict_upcoming_from_goalserve(limit: int = 10) -> List[Dict]:
         )
         predictions.append(build_prediction_payload(payload_row, proba, total_pred, diff_pred))
     return predictions
+
+
+def predict_specific_game(match_date: str, home_team_id: int, away_team_id: int) -> Dict:
+    """Predict a single upcoming game using identifiers provided by the client."""
+    classifier, regressors, _ = load_artifacts()
+    latest, medians, base_feats, extra_feats, feature_columns, bounds = prepare_historical_data()
+
+    feat_df, ctx = build_live_feature_row(home_team_id, away_team_id, latest, medians, base_feats, extra_feats, feature_columns)
+    feat_df = apply_bounds(feat_df, bounds, feature_columns)
+    proba = classifier.predict_proba(feat_df)[:, 1][0]
+    diff_pred = regressors["diff"].predict(feat_df)[0]
+    total_pred = regressors["total"].predict(feat_df)[0]
+
+    match_info = find_match_details(match_date, home_team_id, away_team_id)
+    if not match_info:
+        raise ValueError("Requested match not found in schedule feed")
+    parsed_date = parse_match_date(match_date) or parse_match_date(match_info.get("date"))
+    game_date = pd.to_datetime(parsed_date) if parsed_date else pd.to_datetime(
+        match_info.get("date"), format="%d.%m.%Y", errors="coerce"
+    )
+    if pd.isna(game_date):
+        game_date = pd.Timestamp.utcnow().normalize()
+
+    payload_row = pd.Series(
+        {
+            "home_name": match_info.get("home_name", "") or str(home_team_id),
+            "away_name": match_info.get("away_name", "") or str(away_team_id),
+            "venue_name": match_info.get("venue_name", ""),
+            "game_date": game_date,
+            **{k: v for k, v in ctx.items()},
+        }
+    )
+    return build_prediction_payload(payload_row, proba, total_pred, diff_pred)

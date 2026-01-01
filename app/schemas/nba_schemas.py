@@ -53,6 +53,25 @@ class Prediction(BaseModel):
     predicted_total_points: Optional[float]
     predicted_home_point_diff: Optional[float]
 
+
+# Response slices for dedicated endpoints
+class NBAGameOverview(BaseModel):
+    game_overview: GameOverview
+    model_probabilities: ModelProbabilities
+
+
+class NBAPredictionOnly(BaseModel):
+    prediction: Prediction
+
+
+class NBAStatsBreakdown(BaseModel):
+    core_home: CoreStats
+    core_away: CoreStats
+    efficiency_home: EfficiencyStats
+    efficiency_away: EfficiencyStats
+    lineup_bench: LineupBench
+
+
 class NBAGamePrediction(BaseModel):
     game_overview: GameOverview
     model_probabilities: ModelProbabilities
@@ -62,5 +81,4 @@ class NBAGamePrediction(BaseModel):
     efficiency_away: EfficiencyStats
     lineup_bench: LineupBench
     prediction: Prediction
-
 
