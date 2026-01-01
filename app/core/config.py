@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     goalserve_api_key: str = ""  
     goalserve_base_url: str = "http://www.goalserve.com/getfeed"
+    player_image_base_url: str = "http://127.0.0.1:8000/api/v1/static/"
     api_request_delay: float = 0.5
     log_level: str = "INFO"
     log_directory: str = "logs"
