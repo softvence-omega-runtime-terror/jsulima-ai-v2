@@ -4,6 +4,7 @@ from datetime import datetime
 from app.services.UFC.schedule_pars import SCHEDULE_URL
 from app.services.UFC.schedule_pars import parse_schedule_xml
 from app.services.predictor import get_predictor
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -47,6 +48,12 @@ def get_upcoming_schedule(limit: int| None = Query(default=20, description="Numb
                 m["home_win_probability"] = 50.0
                 m["away_win_probability"] = 50.0
                 m["confidence"] = 50
+
+                # Add image links
+                local_id = m["localteam"]["id"]
+                away_id = m["awayteam"]["id"]
+                m["localteam"]["image_link"] = f"{settings.player_image_base_url}{local_id}.png"
+                m["awayteam"]["image_link"] = f"{settings.player_image_base_url}{away_id}.png"
 
                 # Add real Predictions if possible
                 try:

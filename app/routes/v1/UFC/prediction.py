@@ -36,13 +36,9 @@ def _build_json_response(result: Dict[str, Any], date: str) -> Dict[str, Any]:
     is_local_winner = pred.get('winner_is_local', pred['winner'] == local_name)
     confidence = pred.get('confidence', 50.0)
     
-    # Calculate win probabilities
-    if is_local_winner:
-        local_prob = f"{confidence:.1f}%"
-        away_prob = f"{100 - confidence:.1f}%"
-    else:
-        local_prob = f"{100 - confidence:.1f}%"
-        away_prob = f"{confidence:.1f}%"
+    # Calculate win probabilities from raw model probabilities
+    local_prob = f"{pred.get('home_win_probability', 50.0):.1f}%"
+    away_prob = f"{pred.get('away_win_probability', 50.0):.1f}%"
     
     # Get ML model predicted stats
     stats = pred.get('predicted_stats', {})
