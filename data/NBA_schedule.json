@@ -1,0 +1,172 @@
+[
+  {
+    "id": "240102001",
+    "date": "Jan 02, 2026",
+    "time": "7:30 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Golden 1 Center, Sacramento, CA",
+    "hometeam": {
+      "name": "Sacramento Kings",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Los Angeles Lakers",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102002",
+    "date": "Jan 02, 2026",
+    "time": "7:30 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Crypto.com Arena, Los Angeles, CA",
+    "hometeam": {
+      "name": "Los Angeles Clippers",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Denver Nuggets",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102003",
+    "date": "Jan 02, 2026",
+    "time": "8:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Chase Center, San Francisco, CA",
+    "hometeam": {
+      "name": "Golden State Warriors",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Phoenix Suns",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102004",
+    "date": "Jan 02, 2026",
+    "time": "10:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "American Airlines Center, Dallas, TX",
+    "hometeam": {
+      "name": "Dallas Mavericks",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Houston Rockets",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102005",
+    "date": "Jan 03, 2026",
+    "time": "7:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Scotiabank Arena, Toronto, ON",
+    "hometeam": {
+      "name": "Toronto Raptors",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Boston Celtics",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102006",
+    "date": "Jan 03, 2026",
+    "time": "7:30 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Madison Square Garden, New York, NY",
+    "hometeam": {
+      "name": "New York Knicks",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Miami Heat",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102007",
+    "date": "Jan 03, 2026",
+    "time": "8:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Fiserv Forum, Milwaukee, WI",
+    "hometeam": {
+      "name": "Milwaukee Bucks",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Cleveland Cavaliers",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102008",
+    "date": "Jan 03, 2026",
+    "time": "9:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "Barclays Center, Brooklyn, NY",
+    "hometeam": {
+      "name": "Brooklyn Nets",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Philadelphia 76ers",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102009",
+    "date": "Jan 04, 2026",
+    "time": "2:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "United Center, Chicago, IL",
+    "hometeam": {
+      "name": "Chicago Bulls",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "Indiana Pacers",
+      "totalscore": ""
+    }
+  },
+  {
+    "id": "240102010",
+    "date": "Jan 04, 2026",
+    "time": "7:00 PM",
+    "timezone": "EST",
+    "status": "Not Started",
+    "attendance": "",
+    "venue_name": "FedExForum, Memphis, TN",
+    "hometeam": {
+      "name": "Memphis Grizzlies",
+      "totalscore": ""
+    },
+    "awayteam": {
+      "name": "New Orleans Pelicans",
+      "totalscore": ""
+    }
+  }
+]
