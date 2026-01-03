@@ -71,7 +71,6 @@ class NBAStatsBreakdown(BaseModel):
     efficiency_away: EfficiencyStats
     lineup_bench: LineupBench
 
-
 class NBAGamePrediction(BaseModel):
     game_overview: GameOverview
     model_probabilities: ModelProbabilities
@@ -81,4 +80,3 @@ class NBAGamePrediction(BaseModel):
     efficiency_away: EfficiencyStats
     lineup_bench: LineupBench
     prediction: Prediction
-

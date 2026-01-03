@@ -44,7 +44,7 @@ async def get_nba_predictions(limit: int = Query(10, description="Number of upco
     summary="Get game overview and probabilities for a specific NBA match",
 )
 async def get_nba_game_overview(
-    match_date: str = Query(..., description="Scheduled date for the match (YYYY-MM-DD)"),
+    match_date: str = Query(..., description="Scheduled date for the match (YYYY-MM-DD or DD.MM.YYYY)"),
     home_team_id: int = Query(..., description="Home team ID"),
     away_team_id: int = Query(..., description="Away team ID"),
 ):
@@ -65,7 +65,7 @@ async def get_nba_game_overview(
     summary="Get score and winner prediction for a specific NBA match",
 )
 async def get_nba_game_prediction(
-    match_date: str = Query(..., description="Scheduled date for the match (YYYY-MM-DD)"),
+    match_date: str = Query(..., description="Scheduled date for the match (YYYY-MM-DD or DD.MM.YYYY)"),
     home_team_id: int = Query(..., description="Home team ID"),
     away_team_id: int = Query(..., description="Away team ID"),
 ):
@@ -83,7 +83,7 @@ async def get_nba_game_prediction(
     summary="Get statistical breakdown for a specific NBA match",
 )
 async def get_nba_game_stats(
-    match_date: str = Query(..., description="Scheduled date for the match (YYYY-MM-DD)"),
+    match_date: str = Query(..., description="Scheduled date for the match (YYYY-MM-DD or DD.MM.YYYY)"),
     home_team_id: int = Query(..., description="Home team ID"),
     away_team_id: int = Query(..., description="Away team ID"),
 ):

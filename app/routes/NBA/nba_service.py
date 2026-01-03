@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import pickle
-from datetime import datetime
+from datetime import datetime, date
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -132,7 +132,7 @@ def aggregate_player_team(p: pd.DataFrame) -> pd.DataFrame:
             }
         )
 
-    return p.groupby(["match_id", "team_id", "is_home"]).apply(_agg).reset_index()
+    return p.groupby(["match_id", "team_id", "is_home"]).apply(_agg, include_groups=False).reset_index()
 
 
 def build_team_games(g: pd.DataFrame, player_team_game: pd.DataFrame) -> pd.DataFrame:
@@ -509,6 +509,10 @@ def parse_match_date(date_str: Optional[str]):
     """Attempt to parse a date string into a date object."""
     if not date_str:
         return None
+    if isinstance(date_str, date):
+        return date_str
+    if not isinstance(date_str, str):
+        return None
     for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%m/%d/%Y"):
         try:
             return datetime.strptime(date_str, fmt).date()
@@ -616,14 +620,47 @@ def predict_upcoming_from_goalserve(limit: int = 10) -> List[Dict]:
 
 def predict_specific_game(match_date: str, home_team_id: int, away_team_id: int) -> Dict:
     """Predict a single upcoming game using identifiers provided by the client."""
+    if isinstance(match_date, dict):
+        # handle cases where clients wrap the date in an object
+        match_date = match_date.get("match_date") or match_date.get("date") or ""
+    try:
+        home_team_id = int(home_team_id)
+        away_team_id = int(away_team_id)
+    except (TypeError, ValueError):
+        raise ValueError("Team IDs must be numeric")
+
     classifier, regressors, _ = load_artifacts()
     latest, medians, base_feats, extra_feats, feature_columns, bounds = prepare_historical_data()
 
     feat_df, ctx = build_live_feature_row(home_team_id, away_team_id, latest, medians, base_feats, extra_feats, feature_columns)
     feat_df = apply_bounds(feat_df, bounds, feature_columns)
-    proba = classifier.predict_proba(feat_df)[:, 1][0]
-    diff_pred = regressors["diff"].predict(feat_df)[0]
-    total_pred = regressors["total"].predict(feat_df)[0]
+    proba_raw = classifier.predict_proba(feat_df)[:, 1][0]
+    diff_raw = regressors["diff"].predict(feat_df)[0]
+    total_raw = regressors["total"].predict(feat_df)[0]
+
+    def to_scalar(val):
+        if isinstance(val, dict):
+            # fall back to first value if dict is returned unexpectedly
+            if val:
+                return to_scalar(next(iter(val.values())))
+            raise ValueError("Model prediction returned an unexpected dict")
+        if isinstance(val, (list, tuple)):
+            if len(val) == 0:
+                raise ValueError("Model prediction is empty")
+            return to_scalar(val[0])
+        if hasattr(val, "item"):
+            try:
+                return float(val.item())
+            except Exception:
+                pass
+        return float(val)
+
+    try:
+        proba = to_scalar(proba_raw)
+        diff_pred = to_scalar(diff_raw)
+        total_pred = to_scalar(total_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Model predictions contained non-numeric values: {exc}")
 
     match_info = find_match_details(match_date, home_team_id, away_team_id)
     if not match_info:
