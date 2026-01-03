@@ -57,11 +57,13 @@ def parse_schedule_xml(xml_content: str) -> List[Dict[str, Any]]:
                         "venue_name": match.get('venue_name', ''),
                         "hometeam": {
                             "hometeam_id": hometeam_elem.get('id', ''),
-                            "hometeam_name": hometeam_elem.get('name', '')
+                            "hometeam_name": hometeam_elem.get('name', ''),
+                            "image_link": f"http://127.0.0.1:8000/api/v1/static/basketball/{hometeam_elem.get('id', '')}.png"
                         },
                         "awayteam": {
                             "awayteam_id": awayteam_elem.get('id', ''),
-                            "awayteam_name": awayteam_elem.get('name', '')
+                            "awayteam_name": awayteam_elem.get('name', ''),
+                            "image_link": f"http://127.0.0.1:8000/api/v1/static/basketball/{awayteam_elem.get('id', '')}.png"
                         }
                     }
                     
