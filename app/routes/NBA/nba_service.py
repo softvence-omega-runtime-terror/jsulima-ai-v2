@@ -14,7 +14,8 @@ import pandas as pd
 import requests
 from sklearn.pipeline import Pipeline
 
-from app.core.nba_config import nba_settings
+# from app.core.nba_config import nba_settings
+from app.core.config import nba_settings
 
 # Robust pathing: Root of repo is where `app` and `data` reside.
 # This file is in app/routes/NBA/nba_service.py
@@ -33,7 +34,7 @@ def get_goalserve_url() -> str:
     base_url = nba_settings.goalserve_base_url
     if not api_key:
         raise ValueError("GOALSERVE_API_KEY not configured. Please set it in .env file.")
-    return f"{base_url}{api_key}/bsktbl/nba-shedule?json=1"
+    return f"{base_url}/{api_key}/bsktbl/nba-shedule?json=1"
 
 
 def fetch_goalserve_schedule(timeout: int = 20) -> Dict:
@@ -43,6 +44,7 @@ def fetch_goalserve_schedule(timeout: int = 20) -> Dict:
         return get_mock_schedule()
 
     url = get_goalserve_url()
+
     try:
         # Enforce JSON expectation with header
         headers = {"Accept": "application/json"}

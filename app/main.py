@@ -48,6 +48,9 @@ app.include_router(ufc_router, prefix="/api/v1/ufc/stats", tags=["UFC"])
 app.include_router(h2h_router, prefix="/api/v1/ufc/head_to_head", tags=["UFC"])
 app.include_router(prediction_router, prefix="/api/v1/ufc/predict", tags=["UFC"])
 # app.include_router(basketball_router, prefix="/api/v1/basketball/schedule", tags=["Basketball"])
+
+
+
 app.include_router(prediction_router, prefix="/api/v1/ufc/predict", tags=["UFC"])
 app.include_router(basketball_schedule_router, prefix="/api/v1/basketball/schedule", tags=["Basketball"])
 app.include_router(basketball_prediction_router, prefix="/api/v1/basketball", tags=["Basketball"])
