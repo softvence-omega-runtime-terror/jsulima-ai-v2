@@ -19,6 +19,7 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+app.mount("/static/basketball", StaticFiles(directory="app/data/Basketball"), name="basketball_static")
 app.mount("/static", StaticFiles(directory="app/data/ufc"), name="static")
 
 @app.on_event("startup")
