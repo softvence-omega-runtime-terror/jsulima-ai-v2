@@ -7,6 +7,70 @@
 
 from typing import Dict, Any
 import numpy as np
+import sys
+import types
+
+# Try to import xgboost for XGBBoosterWrapper
+try:
+    import xgboost as xgb
+    HAS_XGB = True
+except ImportError:
+    HAS_XGB = False
+    xgb = None
+
+
+class XGBBoosterWrapper:
+    """
+    Wrapper for XGBoost Booster objects to provide sklearn-compatible predict_proba.
+    Required for loading pickled models that contain XGBoost boosters.
+    """
+    def __init__(self, booster=None, n_classes=2, **kwargs):
+        self.booster = booster
+        self.n_classes = n_classes
+        self._classes_ = np.array(list(range(n_classes)), dtype=int)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+    
+    def _get_booster(self):
+        candidates = ['booster', '_booster', 'model', '_model', 'xgb_model', 'estimator', '_Booster']
+        for attr in candidates:
+            if hasattr(self, attr):
+                val = getattr(self, attr)
+                if val is not None:
+                    return val
+        if hasattr(self, 'predict'):
+            return self
+        return None
+    
+    def predict_proba(self, X):
+        booster = self._get_booster()
+        if booster is None:
+            raise ValueError(f"Booster not found. Available: {list(self.__dict__.keys())}")
+        
+        if hasattr(booster, 'predict_proba') and booster is not self:
+            return booster.predict_proba(X)
+        
+        try:
+            if HAS_XGB and not isinstance(X, xgb.DMatrix):
+                dmatrix = xgb.DMatrix(X)
+            else:
+                dmatrix = X
+            preds = booster.predict(dmatrix)
+            if len(preds.shape) == 1:
+                return np.column_stack([1.0 - preds, preds])
+            return preds
+        except Exception as e:
+            raise ValueError(f"Prediction failed: {e}")
+    
+    def predict(self, X, threshold=0.5):
+        proba = self.predict_proba(X)
+        return (proba[:, 1] > threshold).astype(int)
+    
+    @property
+    def classes_(self):
+        if hasattr(self, '_classes_'):
+            return self._classes_
+        return np.array([0, 1], dtype=int)
 
 class WeightedEnsemble:
     def __init__(self, models_dict: Dict[str, Any], scaler: Any, weights: Dict[str, float] = None):
@@ -56,3 +120,15 @@ class WeightedEnsemble:
     @property
     def classes_(self):
         return self._classes_
+
+
+# ============================================================
+# Register classes in __main__ for pickle compatibility
+# ============================================================
+try:
+    if '__main__' not in sys.modules:
+        sys.modules['__main__'] = types.ModuleType('__main__')
+    sys.modules['__main__'].WeightedEnsemble = WeightedEnsemble
+    sys.modules['__main__'].XGBBoosterWrapper = XGBBoosterWrapper
+except Exception as e:
+    print(f"Warning: Could not register classes in __main__: {e}")

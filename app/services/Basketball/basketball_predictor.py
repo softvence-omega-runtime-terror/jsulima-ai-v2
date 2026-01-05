@@ -33,12 +33,13 @@ from datetime import datetime
 import sys
 import traceback
 
-# Import your module-based WeightedEnsemble (pickle-safe)
+# Import your module-based WeightedEnsemble and XGBBoosterWrapper (pickle-safe)
 try:
-    from app.models.weighted_ensemble import WeightedEnsemble
+    from app.models.weighted_ensemble import WeightedEnsemble, XGBBoosterWrapper
 except ImportError:
     WeightedEnsemble = None
-    print("⚠ WeightedEnsemble not imported from app.models")
+    XGBBoosterWrapper = None
+    print("⚠ WeightedEnsemble/XGBBoosterWrapper not imported from app.models")
 
 # -------- Shim for old pickles --------
 try:
@@ -52,66 +53,14 @@ try:
 except Exception as e:
     print(f"⚠ Could not preload WeightedEnsemble: {e}")
 
-# -------- XGBBoosterWrapper Shim --------
+# -------- XGBBoosterWrapper Shim (use imported class) --------
 try:
-    import xgboost as xgb
-    
-    class XGBBoosterWrapper:
-        def __init__(self, booster=None, n_classes=2, **kwargs):
-            self.booster = booster
-            self.n_classes = n_classes
-            self._classes_ = np.array(list(range(n_classes)), dtype=int)
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-        
-        def _get_booster(self):
-            candidates = ['booster', '_booster', 'model', '_model', 'xgb_model', 'estimator', '_Booster']
-            for attr in candidates:
-                if hasattr(self, attr):
-                    val = getattr(self, attr)
-                    if val is not None:
-                        return val
-            if hasattr(self, 'predict'):
-                return self
-            return None
-        
-        def predict_proba(self, X):
-            booster = self._get_booster()
-            if booster is None:
-                raise ValueError(f"Booster not found. Available: {list(self.__dict__.keys())}")
-            
-            if hasattr(booster, 'predict_proba') and booster is not self:
-                return booster.predict_proba(X)
-            
-            try:
-                if not isinstance(X, xgb.DMatrix):
-                    dmatrix = xgb.DMatrix(X)
-                else:
-                    dmatrix = X
-                preds = booster.predict(dmatrix)
-                if len(preds.shape) == 1:
-                    return np.column_stack([1.0 - preds, preds])
-                return preds
-            except Exception as e:
-                raise ValueError(f"Prediction failed: {e}")
-        
-        def predict(self, X, threshold=0.5):
-            proba = self.predict_proba(X)
-            return (proba[:, 1] > threshold).astype(int)
-        
-        @property
-        def classes_(self):
-            if hasattr(self, '_classes_'):
-                return self._classes_
-            return np.array([0, 1], dtype=int)
-    
-    if '__main__' not in sys.modules:
-        sys.modules['__main__'] = types.ModuleType('__main__')
-    sys.modules['__main__'].XGBBoosterWrapper = XGBBoosterWrapper
-    print("✓ Registered XGBBoosterWrapper under __main__")
-    
-except ImportError:
-    print("⚠ xgboost not installed")
+    import types
+    if XGBBoosterWrapper is not None:
+        if '__main__' not in sys.modules:
+            sys.modules['__main__'] = types.ModuleType('__main__')
+        sys.modules['__main__'].XGBBoosterWrapper = XGBBoosterWrapper
+        print("✓ Registered XGBBoosterWrapper under __main__")
 except Exception as e:
     print(f"⚠ Could not preload XGBBoosterWrapper: {e}")
 
