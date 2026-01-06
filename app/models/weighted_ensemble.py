@@ -10,6 +10,25 @@ import numpy as np
 import sys
 import types
 
+# Import BaseEstimator and ClassifierMixin from sklearn
+from sklearn.base import BaseEstimator, ClassifierMixin
+
+# Monkey patch CatBoostClassifier to add __sklearn_tags__ if missing
+try:
+    import catboost
+    if hasattr(catboost, 'CatBoostClassifier'):
+        from sklearn.utils._tags import Tags, TargetTags
+        if not hasattr(catboost.CatBoostClassifier, '__sklearn_tags__'):
+            def __sklearn_tags__(self):
+                return Tags(
+                    estimator_type="classifier",
+                    target_tags=TargetTags(required=True, one_d_labels=False, two_d_labels=False, positive_only=False, multi_output=False, single_output=True)
+                )
+            catboost.CatBoostClassifier.__sklearn_tags__ = __sklearn_tags__
+            print("✓ Added __sklearn_tags__ to CatBoostClassifier")
+except ImportError:
+    pass
+
 # Try to import xgboost for XGBBoosterWrapper
 try:
     import xgboost as xgb
@@ -19,7 +38,7 @@ except ImportError:
     xgb = None
 
 
-class XGBBoosterWrapper:
+class XGBBoosterWrapper(BaseEstimator, ClassifierMixin):
     """
     Wrapper for XGBoost Booster objects to provide sklearn-compatible predict_proba.
     Required for loading pickled models that contain XGBoost boosters.
@@ -28,8 +47,21 @@ class XGBBoosterWrapper:
         self.booster = booster
         self.n_classes = n_classes
         self._classes_ = np.array(list(range(n_classes)), dtype=int)
+        self._estimator_type = "classifier"  # Explicitly set estimator type
         for k, v in kwargs.items():
             setattr(self, k, v)
+    
+    def __sklearn_tags__(self):
+        """Return sklearn tags for this estimator"""
+        from sklearn.utils._tags import Tags, TargetTags
+        return Tags(
+            estimator_type="classifier",
+            target_tags=TargetTags(required=True, one_d_labels=False, two_d_labels=False, positive_only=False, multi_output=False, single_output=True)
+        )
+    
+    def fit(self, X, y):
+        """Dummy fit method for sklearn compatibility"""
+        return self
     
     def _get_booster(self):
         candidates = ['booster', '_booster', 'model', '_model', 'xgb_model', 'estimator', '_Booster']
@@ -72,7 +104,7 @@ class XGBBoosterWrapper:
             return self._classes_
         return np.array([0, 1], dtype=int)
 
-class WeightedEnsemble:
+class WeightedEnsemble(BaseEstimator, ClassifierMixin):
     def __init__(self, models_dict: Dict[str, Any], scaler: Any, weights: Dict[str, float] = None):
         """
         models_dict: dict of sub-models (e.g. {'lr': lr_model, 'rf': rf_model, ...})
@@ -84,6 +116,19 @@ class WeightedEnsemble:
         self.weights = weights or {}
         # Optional: expose classes_ to play nice with sklearn-like API
         self._classes_ = np.array([0, 1], dtype=int)
+        self._estimator_type = "classifier"  # Explicitly set estimator type
+    
+    def __sklearn_tags__(self):
+        """Return sklearn tags for this estimator"""
+        from sklearn.utils._tags import Tags, TargetTags
+        return Tags(
+            estimator_type="classifier",
+            target_tags=TargetTags(required=True, one_d_labels=False, two_d_labels=False, positive_only=False, multi_output=False, single_output=True)
+        )
+    
+    def fit(self, X, y):
+        """Dummy fit method for sklearn compatibility"""
+        return self
 
     def predict_proba(self, X):
         """
