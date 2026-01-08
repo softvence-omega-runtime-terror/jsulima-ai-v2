@@ -162,6 +162,30 @@ class BasketballPredictor:
         self._error_log.append(message)
         print(f"ERROR: {message}")
 
+    def _patch_xgb_wrappers_in_model(self):
+        """
+        Patch XGBBoosterWrapper instances inside the loaded model to ensure sklearn compatibility.
+        This ensures _estimator_type is set to 'classifier' on all instances.
+        """
+        try:
+            if hasattr(self.ensemble_model, 'models_dict'):
+                # WeightedEnsemble structure
+                for name, model in self.ensemble_model.models_dict.items():
+                    if hasattr(model, 'calibrated_classifiers_'):
+                        # CalibratedClassifierCV structure
+                        for cc in model.calibrated_classifiers_:
+                            if hasattr(cc, 'estimator'):
+                                est = cc.estimator
+                                if type(est).__name__ == 'XGBBoosterWrapper':
+                                    # Update class reference to the imported version
+                                    from app.models.weighted_ensemble import XGBBoosterWrapper as UpdatedWrapper
+                                    est.__class__ = UpdatedWrapper
+                                    # Force the estimator type on the instance
+                                    est._estimator_type = "classifier"
+                                    print(f"  [OK] Patched XGBBoosterWrapper in {name}")
+        except Exception as e:
+            print(f"  [WARNING] Patching XGBBoosterWrapper failed: {e}")
+
     def get_error_details(self) -> str:
         return "\n".join(self._error_log) if self._error_log else "No errors logged"
 
@@ -235,6 +259,10 @@ class BasketballPredictor:
                 self.ensemble_model = joblib.load(model_file)
                 print(f"  ✓ Loaded: {type(self.ensemble_model).__name__}")
                 self._debug_info['model_type'] = type(self.ensemble_model).__name__
+                
+                # CRITICAL: Patch any XGBBoosterWrapper instances to ensure sklearn compatibility
+                self._patch_xgb_wrappers_in_model()
+                
             except Exception as e:
                 self.log_error(f"Failed to load model: {e}")
                 return False
