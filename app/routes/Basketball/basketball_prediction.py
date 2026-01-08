@@ -69,26 +69,17 @@ async def predict_basketball_game(
         )
         
         if "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
+            raise HTTPException(status_code=500, detail=result.get("details", result["error"]))
         
-        pred = result.get('prediction', {})
-        match_info = result.get('match_info', {})
+        # Determine winner based on predicted winner
+        is_home_winner = result['predicted_winner'] == result['home']
+        home_prob = result['home_win_probability']
+        away_prob = result['away_win_probability']
+        confidence = result['confidence']
         
-        # Determine winner and probabilities
-        is_home_winner = pred.get('home_wins', True)
-        confidence = pred.get('confidence', 50.0)
-        
-        # Calculate win probabilities
-        if is_home_winner:
-            home_prob = f"{confidence:.1f}%"
-            away_prob = f"{100 - confidence:.1f}%"
-        else:
-            home_prob = f"{100 - confidence:.1f}%"
-            away_prob = f"{confidence:.1f}%"
-        
-        # Get team names
-        home_name = match_info.get('hometeam_name', f"Team {request.hometeam_id}")
-        away_name = match_info.get('awayteam_name', f"Team {request.awayteam_id}")
+        # Get team names from result
+        home_name = result['home']
+        away_name = result['away']
         
         # Build the response in the requested format
         response = {
@@ -98,20 +89,18 @@ async def predict_basketball_game(
                 "match_id": request.match_id,
                 "awayteam": {
                     "awayteam_id": request.awayteam_id,
-                    "awayteam_name": result['away'],
-                    "win_probability": result['away_win_probability'],
+                    "awayteam_name": away_name,
+                    "win_probability": away_prob,
                     "is_winner": not is_home_winner
                 },
                 "hometeam": {
                     "hometeam_id": request.hometeam_id,
-                    "hometeam_name": result['home'],
-                    "win_probability": result['home_win_probability'],
+                    "hometeam_name": home_name,
+                    "win_probability": home_prob,
                     "is_winner": is_home_winner
                 }
             }
         }
-
-
         
         return response
             

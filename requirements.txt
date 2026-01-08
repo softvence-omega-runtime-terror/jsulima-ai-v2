@@ -3,7 +3,7 @@ uvicorn
 pydantic
 pydantic-settings
 pandas
-scikit-learn
+scikit-learn==1.7.2
 requests
 numpy
 xgboost

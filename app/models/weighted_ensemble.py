@@ -42,7 +42,11 @@ class XGBBoosterWrapper(BaseEstimator, ClassifierMixin):
     """
     Wrapper for XGBoost Booster objects to provide sklearn-compatible predict_proba.
     Required for loading pickled models that contain XGBoost boosters.
+    Inherits from BaseEstimator and ClassifierMixin for sklearn 1.6+ compatibility.
     """
+    # Class attribute for sklearn estimator type detection
+    _estimator_type = "classifier"
+    
     def __init__(self, booster=None, n_classes=2, **kwargs):
         self.booster = booster
         self.n_classes = n_classes
@@ -74,6 +78,10 @@ class XGBBoosterWrapper(BaseEstimator, ClassifierMixin):
             return self
         return None
     
+    def fit(self, X, y=None):
+        """Dummy fit for sklearn compatibility."""
+        return self
+    
     def predict_proba(self, X):
         booster = self._get_booster()
         if booster is None:
@@ -103,6 +111,50 @@ class XGBBoosterWrapper(BaseEstimator, ClassifierMixin):
         if hasattr(self, '_classes_'):
             return self._classes_
         return np.array([0, 1], dtype=int)
+    
+    def __sklearn_is_fitted__(self):
+        """Check if the estimator is fitted."""
+        return hasattr(self, 'booster') and self.booster is not None
+    
+    def __sklearn_tags__(self):
+        """Return sklearn tags for compatibility with sklearn 1.6+."""
+        # Import Tags to manually construct with correct estimator_type
+        from sklearn.utils._tags import Tags, TargetTags, InputTags
+        
+        # Create a Tags object with classifier as the estimator type
+        # This ensures sklearn's is_classifier() will work correctly
+        tags = Tags(
+            estimator_type="classifier",
+            target_tags=TargetTags(
+                required=False,
+                one_d_labels=False,
+                two_d_labels=False,
+                positive_only=False,
+                multi_output=False,
+                single_output=True,
+            ),
+            transformer_tags=None,
+            classifier_tags=None,
+            regressor_tags=None,
+            array_api_support=False,
+            no_validation=False,
+            non_deterministic=False,
+            requires_fit=True,
+            _skip_test=False,
+            input_tags=InputTags(
+                one_d_array=False,
+                two_d_array=True,
+                three_d_array=False,
+                sparse=False,
+                categorical=False,
+                string=False,
+                dict=False,
+                positive_only=False,
+                allow_nan=False,
+                pairwise=False,
+            ),
+        )
+        return tags
 
 class WeightedEnsemble(BaseEstimator, ClassifierMixin):
     def __init__(self, models_dict: Dict[str, Any], scaler: Any, weights: Dict[str, float] = None):
